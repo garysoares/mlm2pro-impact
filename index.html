@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MLM2PRO Impact Position</title>
+<style>
+body{margin:0;background:#111;color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:15px}
+h1{font-size:24px}
+.card{background:#222;border-radius:14px;padding:15px;margin:12px 0}
+button{font-size:16px;padding:10px;margin:4px;border:0;border-radius:9px}
+video{width:100%;background:#000}
+.stage{position:relative}
+canvas{position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none}
+.result{font-size:21px;font-weight:bold;margin-top:12px}
+.small{color:#aaa;font-size:14px}
+</style>
+</head>
+
+<body>
+
+<h1>MLM2PRO Impact Position</h1>
+
+<div class="card">
+<input id="file" type="file" accept="video/*">
+<p id="status" class="small">Choose your Impact Vision recording.</p>
+
+<button id="play" disabled>▶ Play</button>
+<button id="pause" disabled>⏸ Pause</button>
+<button id="back" disabled>◀ Frame</button>
+<button id="next" disabled>Frame ▶</button>
+</div>
+
+<div class="card">
+
+<div class="stage">
+<video id="video" playsinline webkit-playsinline></video>
+<canvas id="canvas"></canvas>
+</div>
+
+<button id="face" disabled>Mark Face Center</button>
+<button id="ball" disabled>Mark Ball</button>
+<button id="clear" disabled>Clear</button>
+
+<p class="small">
+Pause the Impact Vision video near impact. Mark the center of the clubface and the ball.
+</p>
+
+</div>
+
+<div class="card">
+
+<label>
+Clubface width:
+<input id="width" type="number" value="180">
+</label>
+
+<br><br>
+
+<label>
+Clubface height:
+<input id="height" type="number" value="80">
+</label>
+
+<br><br>
+
+<button id="calculate" disabled>
+Calculate Impact Position
+</button>
+
+<div id="result" class="result">
+No measurement yet
+</div>
+
+</div>
+
+<script>
+
+const file=document.getElementById("file");
+const video=document.getElementById("video");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+const status=document.getElementById("status");
+
+let fileURL=null;
+let mode=null;
+let face=null;
+let ball=null;
+
+function resizeCanvas(){
+ if(!video.videoWidth)return;
+ canvas.width=video.videoWidth;
+ canvas.height=video.videoHeight;
+ draw();
+}
+
+function draw(){
+
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ if(face){
+  ctx.beginPath();
+  ctx.arc(face.x,face.y,12,0,Math.PI*2);
+  ctx.fillStyle="#00ff66";
+  ctx.fill();
+
+  ctx.fillStyle="white";
+  ctx.font="bold 16px sans-serif";
+  ctx.fillText("FACE",face.x+15,face.y+5);
+ }
+
+ if(ball){
+  ctx.beginPath();
+  ctx.arc(ball.x,ball.y,12,0,Math.PI*2);
+  ctx.fillStyle="#ff304f";
+  ctx.fill();
+
+  ctx.fillStyle="white";
+  ctx.font="bold 16px sans-serif";
+  ctx.fillText("BALL",ball.x+15,ball.y+5);
+ }
+
+ if(face && ball){
+
+  ctx.beginPath();
+  ctx.moveTo(face.x,face.y);
+  ctx.lineTo(ball.x,ball.y);
+  ctx.strokeStyle="white";
+  ctx.lineWidth=3;
+  ctx.stroke();
+ }
+}
+
+file.onchange=function(){
+
+ const f=file.files[0];
+
+ if(!f)return;
+
+ if(fileURL)URL.revokeObjectURL(fileURL);
+
+ fileURL=URL.createObjectURL(f);
+
+ video.src=fileURL;
+ video.load();
+
+ status.textContent="Loading "+f.name+"...";
+};
+
+video.onloadedmetadata=function(){
+
+ resizeCanvas();
+
+ document.querySelectorAll("button").forEach(b=>{
+  b.disabled=false;
+ });
+
+ status.textContent=
+ "Ready — "+video.videoWidth+" × "+video.videoHeight;
+};
+
+video.onerror=function(){
+
+ status.textContent=
+ "Safari could not decode this video.";
+};
+
+document.getElementById("play").onclick=function(){
+ video.play();
+};
+
+document.getElementById("pause").onclick=function(){
+ video.pause();
+};
+
+document.getElementById("back").onclick=function(){
+
+ video.pause();
+
+ video.currentTime=
+ Math.max(0,video.currentTime-1/30);
+};
+
+document.getElementById("next").onclick=function(){
+
+ video.pause();
+
+ video.currentTime=
+ Math.min(video.duration,video.currentTime+1/30);
+};
+
+function getPoint(e){
+
+ const r=canvas.getBoundingClientRect();
+
+ return {
+  x:(e.clientX-r.left)*canvas.width/r.width,
+  y:(e.clientY-r.top)*canvas.height/r.height
+ };
+}
+
+canvas.onpointerdown=function(e){
+
+ if(!mode)return;
+
+ const p=getPoint(e);
+
+ if(mode==="face"){
+  face=p;
+ }
+
+ if(mode==="ball"){
+  ball=p;
+ }
+
+ mode=null;
+
+ draw();
+
+ document.getElementById("calculate").disabled=
+ !(face && ball);
+};
+
+document.getElementById("face").onclick=function(){
+ mode="face";
+ status.textContent="Tap the CENTER of the clubface.";
+};
+
+document.getElementById("ball").onclick=function(){
+ mode="ball";
+ status.textContent="Tap the CENTER of the ball.";
+};
+
+document.getElementById("clear").onclick=function(){
+
+ face=null;
+ ball=null;
+ mode=null;
+
+ draw();
+
+ document.getElementById("calculate").disabled=true;
+
+ document.getElementById("result").textContent=
+ "No measurement yet";
+};
+
+document.getElementById("calculate").onclick=function(){
+
+ const width=
+ Math.max(1,Number(document.getElementById("width").value));
+
+ const height=
+ Math.max(1,Number(document.getElementById("height").value));
+
+ const x=
+ (ball.x-face.x)/(width/2);
+
+ const y=
+ (face.y-ball.y)/(height/2);
+
+ let horizontal="CENTER";
+
+ if(x>0.15)horizontal="TOE";
+ if(x<-0.15)horizontal="HEEL";
+
+ let vertical="CENTER";
+
+ if(y>0.15)vertical="HIGH";
+ if(y<-0.15)vertical="LOW";
+
+ document.getElementById("result").textContent=
+ horizontal+" / "+vertical+
+ "   X "+Math.round(x*100)+"%"+
+ "   Y "+Math.round(y*100)+"%";
+};
+
+window.addEventListener("resize",resizeCanvas);
+
+</script>
+
+</body>
+</html>
